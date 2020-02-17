@@ -1,7 +1,7 @@
 ---
 title: "Statistical assignment 3"
-author: "[add your name here] [add your candidate number here - mandatory]"
-date: "[add date here]"
+author: "Olivia Mason Pearson 670025149"
+date: "12/02/2020"
 output: github_document
 ---
 
@@ -13,6 +13,7 @@ knitr::opts_chunk$set(echo = TRUE)
 knitr::opts_chunk$set(message = FALSE)
 # Switching on caching to make things faster (don't commit cache files on Github).
 knitr::opts_chunk$set(cache = TRUE)
+knitr::opts_chunk$set(warning = FALSE)
 ```
 
 In this assignment we will explore political interest (*vote6*) and how it changes over time.
@@ -26,6 +27,7 @@ The only thing you need to do for this code to work on your computer is to provi
 ```{r}
 library(tidyverse)
 library(data.table)
+library(dplyr)
 
 # data.table is faster compared to readr so we'll use it in this case (the function fread()). You need to install this package first to be able to run this code.
 
@@ -33,7 +35,7 @@ library(data.table)
 
 files <- dir(
              # Select the folder where the files are stored.
-             "[add your path here]",
+             "/Users/LIV/Desktop/DATA ANALYSIS/DATA ANALYSIS III/UKDA-6614-tab",
              # Tell R which pattern you want present in the files it will display.
              pattern = "indresp",
              # We want this process to repeat through the entire folder.
@@ -74,7 +76,13 @@ Now we have got the data from all 7 waves in the same data frame **all7** in the
 
 ```{r}
 Long <- all7 %>%
-  ...
+  pivot_longer(a_sex_dv)
+  
+Long <- all7 %>%
+  pivot_longer(a_memorig:g_vote6, names_to = "variable", values_to = "value") %>%
+  separate(variable, into = c("wave", "variable"), sep = "_", extra = "merge") %>%
+  pivot_wider(names_from = variable, values_from = value)
+
 Long
 ```
 
@@ -83,16 +91,24 @@ Long
 Now we want to filter the data keeping only respondents from the original UKHLS sample for Great Britain (memorig == 1). We also want to clean the variables for sex (recoding it to "male" or "female") and political interest (keeping the values from 1 to 4 and coding all negative values as missing). Tabulate *sex* and *vote6* to make sure your recodings were correct. 
 
 ```{r}
+
 Long <- Long %>%
-        filter(...) %>%
-        mutate(sex_dv = ...) %>%
-        mutate(vote6 = ...)
+        filter(memorig==1) %>%
+        mutate(sex_dv = ifelse(sex_dv == 2, "female",
+                           ifelse(sex_dv == 1, "male", NA)))
 
-Long %>%
-        ...
-Long %>%
-        ...
+Long <- Long %>%
+   mutate(vote6 = recode(vote6,
+                         `1` = 1,
+                         `2` = 2,
+                         `3` = 3,
+                         `4` = 4,
+                         .default = NA_real_
+   ))
+                         
 
+  table(Long$vote6)
+  table(Long$sex_dv)
 ```
 
 ## Calculate mean political interest by sex and wave (10 points)
@@ -101,7 +117,11 @@ Political interest is an ordinal variable, but we will treat it as interval and 
 
 ```{r}
 meanVote6 <- Long %>%
-        ...
+  group_by(wave, sex_dv) %>%
+  summarise(
+    meanVote6 = mean(vote6, na.rm = TRUE)
+  ) %>%
+  na.omit()
         
 meanVote6
 ```
@@ -121,8 +141,10 @@ Write a short interpretation of your findings.
 
 ```{r}
 meanVote6 %>%
-        ...
+  pivot_wider(names_from = wave, values_from = meanVote6)
 ```
+
+Interpretation = A smaller mean vote represents a higher interest in politics, with 1 being 'very interested', and 4 being 'not interested at all'. Therefore, from this table, I can see that men tend to be more interested in politics than women, with both genders falling between 'fairly interested' and 'not very interested' for the most part. I also notice as the wave increases (so in more recent years), there is a steady increase in interest in politics for both genders. The more steep incline in interest between wave f (2014-2015) and wave g (2015-2016) could be explained by occurrence of the Brexit vote in 2016, where politics became a lot more contentious.
 
 ## Estimate stability of political interest (30 points)
 
@@ -147,6 +169,49 @@ Write the R code that does the following.
 5. Write a short interpretation of your findings.
 
 ```{r}
-...
+# this is my best attempt at this exercise, I don't believe I am completely correct here however I couldn't quite see where I went wrong.
 
+# must omit any missing values, proxies etc from vote6, therefore any votes less than 0 will include this
+Delta <- all7 %>%
+  mutate(a_vote6 = ifelse(a_vote6 < 1, NA, a_vote6)) %>%                    
+  mutate(b_vote6 = ifelse(b_vote6 < 1, NA, b_vote6)) %>%
+  mutate(c_vote6 = ifelse(c_vote6 < 1, NA, c_vote6)) %>%
+  mutate(d_vote6 = ifelse(d_vote6 < 1, NA, d_vote6)) %>%
+  mutate(e_vote6 = ifelse(e_vote6 < 1, NA, e_vote6)) %>%
+  mutate(f_vote6 = ifelse(f_vote6 < 1, NA, f_vote6)) %>%
+  mutate(g_vote6 = ifelse(g_vote6 < 1, NA, g_vote6)) %>%
+  na.omit()
+
+# creating a new variable for delta for each pidp
+
+Delta <- Delta %>%
+  group_by(pidp) %>%
+  mutate(deltavalue = abs(b_vote6-a_vote6) + abs(c_vote6-b_vote6) + abs(d_vote6-c_vote6) + abs(e_vote6-d_vote6) + abs(f_vote6-e_vote6) + abs(g_vote6-f_vote6))
+
+Delta <- Delta %>%
+  gather(a_memorig:g_vote6, key = "variable", value = "value") %>%
+separate(variable, into = c("wave", "variable"), sep = "_", extra = "merge") %>%
+  spread(key = variable, value = value)
+
+# creating a new data frame for sex, filtering out -9 values (missing)
+
+DeltaSex <- Delta %>%
+  group_by(sex_dv) %>%
+  summarise(meandatavalue = mean(deltavalue, na.rm=TRUE)) %>%
+  mutate(sex_dv = ifelse(sex_dv < 1, NA, sex_dv)) %>%
+  na.omit()
+DeltaSex
+
+# attempting to do the same for age
+
+DeltaAge <- Delta %>%
+  filter(wave=="a") %>%
+  group_by(age_dv) %>%
+  summarise(deltavalue = mean(deltavalue, na.rm=TRUE))
+
+DeltaAge %>%
+  ggplot(aes(x=age_dv, y=deltavalue)) + geom_point(colour = "cyan", size = 1) + geom_smooth(method = 'loess', formula = y~x) + aes(group=1) + ggtitle("Effect of Age on Stability of Political Interest") + xlab("Age in Wave 1") + ylab("Mean Delta Value")
+ 
 ```
+
+Interpretation: This graph actually shows fairly surprising results, as intuitively I would imagine as people got older, their political interest would become more stable, with younger more impressionable people having a more varied political interest. This graph on the other hand shows an increase in mean Delta value as age increases, which suggests that older people's political interest levels are less stable.
